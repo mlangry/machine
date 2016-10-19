@@ -30,20 +30,22 @@ import (
 )
 
 const (
-	B2DUser        = "docker"
-	B2DPass        = "tcuser"
-	isoFilename    = "boot2docker.iso"
-	isoConfigDrive = "configdrive.iso"
+	B2DUser                 = "docker"
+	B2DPass                 = "tcuser"
+	isoFilename             = "boot2docker.iso"
+	isoExperimentalFilename = "boot2docker-experimental.iso"
+	isoConfigDrive          = "configdrive.iso"
 )
 
 // Driver for VMware Fusion
 type Driver struct {
 	*drivers.BaseDriver
-	Memory         int
-	DiskSize       int
-	CPU            int
-	ISO            string
-	Boot2DockerURL string
+	Memory                  int
+	DiskSize                int
+	CPU                     int
+	ISO                     string
+	Boot2DockerExperimental bool
+	Boot2DockerURL          string
 
 	SSHPassword    string
 	ConfigDriveISO string
@@ -63,6 +65,11 @@ const (
 // "docker hosts create"
 func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 	return []mcnflag.Flag{
+		mcnflag.BoolFlag{
+			EnvVar: "FUSION_BOOT2DOCKER_EXPERIMENTAL",
+			Name:   "vmwarefusion-boot2docker-experimental",
+			Usage:  "Use the experimental boot2docker image",
+		},
 		mcnflag.StringFlag{
 			EnvVar: "FUSION_BOOT2DOCKER_URL",
 			Name:   "vmwarefusion-boot2docker-url",
@@ -151,15 +158,21 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.Memory = flags.Int("vmwarefusion-memory-size")
 	d.CPU = flags.Int("vmwarefusion-cpu-count")
 	d.DiskSize = flags.Int("vmwarefusion-disk-size")
+	d.Boot2DockerExperimental = flags.Bool("vmwarefusion-boot2docker-experimental")
 	d.Boot2DockerURL = flags.String("vmwarefusion-boot2docker-url")
 	d.ConfigDriveURL = flags.String("vmwarefusion-configdrive-url")
-	d.ISO = d.ResolveStorePath(isoFilename)
 	d.ConfigDriveISO = d.ResolveStorePath(isoConfigDrive)
 	d.SetSwarmConfigFromFlags(flags)
 	d.SSHUser = flags.String("vmwarefusion-ssh-user")
 	d.SSHPassword = flags.String("vmwarefusion-ssh-password")
 	d.SSHPort = 22
 	d.NoShare = flags.Bool("vmwarefusion-no-share")
+
+	if d.Boot2DockerExperimental {
+		d.ISO = d.ResolveStorePath(isoExperimentalFilename)
+	} else {
+		d.ISO = d.ResolveStorePath(isoFilename)
+	}
 
 	// We support a maximum of 16 cpu to be consistent with Virtual Hardware 10
 	// specs.
@@ -229,7 +242,7 @@ func (d *Driver) GetState() (state.State, error) {
 func (d *Driver) PreCreateCheck() error {
 	// Downloading boot2docker to cache should be done here to make sure
 	// that a download failure will not leave a machine half created.
-	b2dutils := mcnutils.NewB2dUtils(d.StorePath)
+	b2dutils := mcnutils.NewB2dUtils(d.StorePath, d.Boot2DockerExperimental)
 	if err := b2dutils.UpdateISOCache(d.Boot2DockerURL); err != nil {
 		return err
 	}
@@ -238,7 +251,7 @@ func (d *Driver) PreCreateCheck() error {
 }
 
 func (d *Driver) Create() error {
-	b2dutils := mcnutils.NewB2dUtils(d.StorePath)
+	b2dutils := mcnutils.NewB2dUtils(d.StorePath, d.Boot2DockerExperimental)
 	if err := b2dutils.CopyIsoToMachineDir(d.Boot2DockerURL, d.MachineName); err != nil {
 		return err
 	}

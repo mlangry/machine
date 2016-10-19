@@ -20,15 +20,19 @@ func TestGetReleaseURL(t *testing.T) {
 	testCases := []struct {
 		apiURL         string
 		isoURL         string
+		experimental   bool
 		machineVersion string
 		response       string
 	}{
-		{"/repos/org/repo/releases/latest", "/org/repo/releases/download/v0.1/boot2docker.iso", "v0.7.0", `{"tag_name": "v0.1"}`},
+		{"/repos/org/repo/releases/latest", "/org/repo/releases/download/v0.1/boot2docker.iso", false, "v0.7.0", `{"tag_name": "v0.1"}`},
 
 		// Note the difference in this one: It's an RC version.
-		{"/repos/org/repo/releases", "/org/repo/releases/download/v0.2-rc1/boot2docker.iso", "v0.7.0-rc2", `[{"tag_name": "v0.2-rc1"}, {"tag_name": "v0.1"}]`},
+		{"/repos/org/repo/releases", "/org/repo/releases/download/v0.2-rc1/boot2docker.iso", false, "v0.7.0-rc2", `[{"tag_name": "v0.2-rc1"}, {"tag_name": "v0.1"}]`},
 
-		{"http://dummy.com/boot2docker.iso", "http://dummy.com/boot2docker.iso", "v0.7.0", `{"tag_name": "v0.1"}`},
+		// Note the difference in this one: It's an experimental version.
+		{"/repos/org/repo/releases/latest", "/org/repo/releases/download/v1.12.2/boot2docker-experimental.iso", true, "v1.12.2-experimental", `{"tag_name": "v1.12.2"}`},
+
+		{"http://dummy.com/boot2docker.iso", "http://dummy.com/boot2docker.iso", false, "v0.7.0", `{"tag_name": "v0.1"}`},
 	}
 
 	for _, tt := range testCases {
@@ -39,7 +43,7 @@ func TestGetReleaseURL(t *testing.T) {
 		// an interface.
 		actualMachineVersion := version.Version
 		version.Version = tt.machineVersion
-		b := NewB2dUtils("/tmp/isos")
+		b := NewB2dUtils("/tmp/isos", tt.experimental)
 		isoURL, err := b.getReleaseURL(testServer.URL + tt.apiURL)
 
 		assert.NoError(t, err)
@@ -64,7 +68,7 @@ func TestGetReleaseURLError(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		b := NewB2dUtils("/tmp/isos")
+		b := NewB2dUtils("/tmp/isos", false)
 		_, err := b.getReleaseURL(tt.apiURL)
 
 		assert.Error(t, err)
@@ -75,6 +79,7 @@ func TestVersion(t *testing.T) {
 	testCases := []string{
 		"v0.1.0",
 		"v0.2.0-rc1",
+		"v1.12.2-experimental",
 	}
 
 	for _, vers := range testCases {
@@ -107,7 +112,7 @@ func TestDownloadISO(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	b := NewB2dUtils("/tmp/artifacts")
+	b := NewB2dUtils("/tmp/artifacts", false)
 	err = b.DownloadISO(tmpDir, filename, ts.URL)
 
 	assert.NoError(t, err)
@@ -177,12 +182,17 @@ func TestReaderWithProgress(t *testing.T) {
 }
 
 type mockReleaseGetter struct {
-	ver    string
-	apiErr error
-	verCh  chan<- string
+	ver          string
+	apiErr       error
+	verCh        chan<- string
+	experimental bool
 }
 
 func (m *mockReleaseGetter) filename() string {
+	if m.experimental {
+		return defaultExperimentalFilename
+	}
+
 	return defaultISOFilename
 }
 
@@ -197,12 +207,20 @@ func (m *mockReleaseGetter) getReleaseURL(apiURL string) (string, error) {
 func (m *mockReleaseGetter) download(dir, file, isoURL string) error {
 	path := filepath.Join(dir, file)
 	var err error
+	var isoVer string
+
+	if m.experimental {
+		isoVer = m.ver + "-experimental"
+	} else {
+		isoVer = m.ver
+	}
+
 	if _, e := os.Stat(path); os.IsNotExist(e) {
-		err = ioutil.WriteFile(path, dummyISOData("  ", m.ver), 0644)
+		err = ioutil.WriteFile(path, dummyISOData("  ", isoVer), 0644)
 	}
 
 	// send a signal of downloading the latest version
-	m.verCh <- m.ver
+	m.verCh <- isoVer
 	return err
 }
 
@@ -235,41 +253,54 @@ func TestCopyDefaultISOToMachine(t *testing.T) {
 	apiErr := errors.New("api error")
 
 	testCases := []struct {
-		machineName string
-		create      bool
-		localVer    string
-		latestVer   string
-		apiErr      error
-		wantVer     string
+		machineName  string
+		create       bool
+		localVer     string
+		latestVer    string
+		apiErr       error
+		wantVer      string
+		experimental bool
 	}{
-		{"none", false, "", "v1.0.0", nil, "v1.0.0"},         // none => downloading
-		{"latest", true, "v1.0.0", "v1.0.0", nil, "v1.0.0"},  // latest iso => as is
-		{"old-badurl", true, "v0.1.0", "", apiErr, "v0.1.0"}, // old iso with bad api => as is
-		{"old", true, "v0.1.0", "v1.0.0", nil, "v1.0.0"},     // old iso => updating
+		{"none", false, "", "v1.0.0", nil, "v1.0.0", false},                                              // none => downloading
+		{"latest", true, "v1.0.0", "v1.0.0", nil, "v1.0.0", false},                                       // latest iso => as is
+		{"old-badurl", true, "v0.1.0", "", apiErr, "v0.1.0", false},                                      // old iso with bad api => as is
+		{"old", true, "v0.1.0", "v1.0.0", nil, "v1.0.0", false},                                          // old iso => updating
+		{"latest-experimental", true, "v1.0.0-experimental", "v1.0.0", nil, "v1.0.0-experimental", true}, // latest experimental iso => as is
+		{"old-experimental", true, "v0.1.0-experimental", "v1.0.0", nil, "v1.0.0-experimental", true},    // old experimental iso => updating
 	}
 
+	var isoFilename string
 	var isopath string
 	var err error
 	verCh := make(chan string, 1)
 	for _, tt := range testCases {
+		if tt.experimental {
+			isoFilename = defaultExperimentalFilename
+		} else {
+			isoFilename = defaultISOFilename
+		}
+
 		if tt.create {
-			isopath, _, err = newDummyISO("cache", defaultISOFilename, tt.localVer)
+			isopath, _, err = newDummyISO("cache", isoFilename, tt.localVer)
 		} else {
 			if dir, e := ioutil.TempDir("", "machine-test"); e == nil {
-				isopath = filepath.Join(dir, "cache", defaultISOFilename)
+				isopath = filepath.Join(dir, "cache", isoFilename)
 			}
 		}
 
 		// isopath: "$TMPDIR/machine-test-xxxxxx/cache/boot2docker.iso"
+		// if experimental
+		// isopath: "$TMPDIR/machine-test-xxxxxx/cache/boot2docker-experimental.iso"
 		// tmpDir: "$TMPDIR/machine-test-xxxxxx"
 		imgCachePath := filepath.Dir(isopath)
 		storePath := filepath.Dir(imgCachePath)
 
 		b := &B2dUtils{
 			releaseGetter: &mockReleaseGetter{
-				ver:    tt.latestVer,
-				apiErr: tt.apiErr,
-				verCh:  verCh,
+				ver:          tt.latestVer,
+				apiErr:       tt.apiErr,
+				verCh:        verCh,
+				experimental: tt.experimental,
 			},
 			iso: &mockISO{
 				isopath: isopath,

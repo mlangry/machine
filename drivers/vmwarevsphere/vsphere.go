@@ -35,8 +35,9 @@ import (
 
 const (
 	// dockerBridgeIP is the default IP address of the docker0 bridge.
-	dockerBridgeIP = "172.17.0.1"
-	isoFilename    = "boot2docker.iso"
+	dockerBridgeIP          = "172.17.0.1"
+	isoFilename             = "boot2docker.iso"
+	isoExperimentalFilename = "boot2docker-experimental.iso"
 	// B2DUser is the guest User for tools login
 	B2DUser = "docker"
 	// B2DPass is the guest Pass for tools login
@@ -45,12 +46,13 @@ const (
 
 type Driver struct {
 	*drivers.BaseDriver
-	Memory         int
-	DiskSize       int
-	CPU            int
-	ISO            string
-	Boot2DockerURL string
-	CPUS           int
+	Memory                  int
+	DiskSize                int
+	CPU                     int
+	ISO                     string
+	Boot2DockerExperimental bool
+	Boot2DockerURL          string
+	CPUS                    int
 
 	IP         string
 	Port       int
@@ -95,6 +97,11 @@ func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 			Name:   "vmwarevsphere-disk-size",
 			Usage:  "vSphere size of disk for docker VM (in MB)",
 			Value:  defaultDiskSize,
+		},
+		mcnflag.BoolFlag{
+			EnvVar: "VSPHERE_BOOT2DOCKER_EXPERIMENTAL",
+			Name:   "vmwarevsphere-boot2docker-experimental",
+			Usage:  "Use the experimental boot2docker image",
 		},
 		mcnflag.StringFlag{
 			EnvVar: "VSPHERE_BOOT2DOCKER_URL",
@@ -191,6 +198,7 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.CPU = flags.Int("vmwarevsphere-cpu-count")
 	d.Memory = flags.Int("vmwarevsphere-memory-size")
 	d.DiskSize = flags.Int("vmwarevsphere-disk-size")
+	d.Boot2DockerExperimental = flags.Bool("vmwarevsphere-boot2docker-experimental")
 	d.Boot2DockerURL = flags.String("vmwarevsphere-boot2docker-url")
 	d.IP = flags.String("vmwarevsphere-vcenter")
 	d.Port = flags.Int("vmwarevsphere-vcenter-port")
@@ -203,7 +211,11 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.HostSystem = flags.String("vmwarevsphere-hostsystem")
 	d.SetSwarmConfigFromFlags(flags)
 
-	d.ISO = d.ResolveStorePath(isoFilename)
+	if d.Boot2DockerExperimental {
+		d.ISO = d.ResolveStorePath(isoExperimentalFilename)
+	} else {
+		d.ISO = d.ResolveStorePath(isoFilename)
+	}
 
 	return nil
 }
@@ -359,7 +371,7 @@ func (d *Driver) PreCreateCheck() error {
 // 3. create a virtual machine with the boot2docker ISO mounted;
 // 4. reconfigure the virtual machine network and disk size;
 func (d *Driver) Create() error {
-	b2dutils := mcnutils.NewB2dUtils(d.StorePath)
+	b2dutils := mcnutils.NewB2dUtils(d.StorePath, d.Boot2DockerExperimental)
 	if err := b2dutils.CopyIsoToMachineDir(d.Boot2DockerURL, d.MachineName); err != nil {
 		return err
 	}

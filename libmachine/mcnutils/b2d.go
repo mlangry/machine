@@ -21,11 +21,12 @@ import (
 )
 
 const (
-	defaultURL            = "https://api.github.com/repos/boot2docker/boot2docker/releases"
-	defaultISOFilename    = "boot2docker.iso"
-	defaultVolumeIDOffset = int64(0x8028)
-	versionPrefix         = "-v"
-	defaultVolumeIDLength = 32
+	defaultURL                  = "https://api.github.com/repos/boot2docker/boot2docker/releases"
+	defaultISOFilename          = "boot2docker.iso"
+	defaultExperimentalFilename = "boot2docker-experimental.iso"
+	defaultVolumeIDOffset       = int64(0x8028)
+	versionPrefix               = "-v"
+	defaultVolumeIDLength       = 32
 )
 
 var (
@@ -333,20 +334,29 @@ func removeFileIfExists(name string) error {
 type B2dUtils struct {
 	releaseGetter
 	iso
+	experimental bool
 	storePath    string
 	imgCachePath string
 }
 
-func NewB2dUtils(storePath string) *B2dUtils {
+func NewB2dUtils(storePath string, experimental bool) *B2dUtils {
 	imgCachePath := filepath.Join(storePath, "cache")
+	var isoFilename = ""
+
+	if experimental {
+		isoFilename = defaultExperimentalFilename
+	} else {
+		isoFilename = defaultISOFilename
+	}
 
 	return &B2dUtils{
-		releaseGetter: &b2dReleaseGetter{isoFilename: defaultISOFilename},
+		releaseGetter: &b2dReleaseGetter{isoFilename: isoFilename},
 		iso: &b2dISO{
-			commonIsoPath:  filepath.Join(imgCachePath, defaultISOFilename),
+			commonIsoPath:  filepath.Join(imgCachePath, isoFilename),
 			volumeIDOffset: defaultVolumeIDOffset,
 			volumeIDLength: defaultVolumeIDLength,
 		},
+		experimental: experimental,
 		storePath:    storePath,
 		imgCachePath: imgCachePath,
 	}
@@ -478,6 +488,10 @@ func (b *B2dUtils) isLatest() bool {
 	if err != nil {
 		log.Warn("Unable to get the latest Boot2Docker ISO release version: ", err)
 		return true
+	}
+
+	if b.experimental {
+		return localVer == fmt.Sprintf("%s-experimental", latestVer)
 	}
 
 	return localVer == latestVer

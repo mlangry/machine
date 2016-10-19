@@ -18,13 +18,14 @@ import (
 
 type Driver struct {
 	*drivers.BaseDriver
-	Boot2DockerURL string
-	VSwitch        string
-	DiskSize       int
-	MemSize        int
-	CPU            int
-	MacAddr        string
-	VLanID         int
+	Boot2DockerExperimental bool
+	Boot2DockerURL          string
+	VSwitch                 string
+	DiskSize                int
+	MemSize                 int
+	CPU                     int
+	MacAddr                 string
+	VLanID                  int
 }
 
 const (
@@ -51,6 +52,11 @@ func NewDriver(hostName, storePath string) *Driver {
 // "docker hosts create"
 func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 	return []mcnflag.Flag{
+		mcnflag.BoolFlag{
+			Name:   "hyperv-boot2docker-experimental",
+			Usage:  "Use the experimental boot2docker image",
+			EnvVar: "HYPERV_BOOT2DOCKER_EXPERIMENTAL",
+		},
 		mcnflag.StringFlag{
 			Name:   "hyperv-boot2docker-url",
 			Usage:  "URL of the boot2docker ISO. Defaults to the latest available version.",
@@ -97,6 +103,7 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	if drivers.EngineInstallURLFlagSet(flags) {
 		return errors.New("--engine-install-url cannot be used with the hyperv driver, use --hyperv-boot2docker-url instead")
 	}
+	d.Boot2DockerExperimental = flags.Bool("hyperv-boot2docker-experimental")
 	d.Boot2DockerURL = flags.String("hyperv-boot2docker-url")
 	d.VSwitch = flags.String("hyperv-virtual-switch")
 	d.DiskSize = flags.Int("hyperv-disk-size")
@@ -181,7 +188,7 @@ func (d *Driver) PreCreateCheck() error {
 
 	// Downloading boot2docker to cache should be done here to make sure
 	// that a download failure will not leave a machine half created.
-	b2dutils := mcnutils.NewB2dUtils(d.StorePath)
+	b2dutils := mcnutils.NewB2dUtils(d.StorePath, d.Boot2DockerExperimental)
 	if err := b2dutils.UpdateISOCache(d.Boot2DockerURL); err != nil {
 		return err
 	}
@@ -190,7 +197,7 @@ func (d *Driver) PreCreateCheck() error {
 }
 
 func (d *Driver) Create() error {
-	b2dutils := mcnutils.NewB2dUtils(d.StorePath)
+	b2dutils := mcnutils.NewB2dUtils(d.StorePath, d.Boot2DockerExperimental)
 	if err := b2dutils.CopyIsoToMachineDir(d.Boot2DockerURL, d.MachineName); err != nil {
 		return err
 	}
@@ -246,9 +253,16 @@ func (d *Driver) Create() error {
 		}
 	}
 
+	var isoFilename = ""
+	if d.Boot2DockerExperimental {
+		isoFilename = "boot2docker-experimental.iso"
+	} else {
+		isoFilename = "boot2docker.iso"
+	}
+
 	if err := cmd("Set-VMDvdDrive",
 		"-VMName", d.MachineName,
-		"-Path", quote(d.ResolveStorePath("boot2docker.iso"))); err != nil {
+		"-Path", quote(d.ResolveStorePath(isoFilename))); err != nil {
 		return err
 	}
 

@@ -350,13 +350,13 @@ func (v *MockCreateOperations) vbmOutErr(args ...string) (string, string, error)
 	return output, "", err
 }
 
-func (v *MockCreateOperations) UpdateISOCache(storePath, isoURL string) error {
-	_, err := v.doCall("UpdateISOCache " + storePath + " " + isoURL)
+func (v *MockCreateOperations) UpdateISOCache(storePath, isoURL string, experimental bool) error {
+	_, err := v.doCall(fmt.Sprintf("UpdateISOCache "+storePath+" "+isoURL+" %t", experimental))
 	return err
 }
 
-func (v *MockCreateOperations) CopyIsoToMachineDir(storePath, machineName, isoURL string) error {
-	_, err := v.doCall("CopyIsoToMachineDir " + storePath + " " + machineName + " " + isoURL)
+func (v *MockCreateOperations) CopyIsoToMachineDir(storePath, machineName, isoURL string, experimental bool) error {
+	_, err := v.doCall(fmt.Sprintf("CopyIsoToMachineDir "+storePath+" "+machineName+" "+isoURL+" %t", experimental))
 	return err
 }
 
@@ -450,7 +450,7 @@ func TestCreateVM(t *testing.T) {
 
 	driver := NewDriver("default", "path")
 	mockCalls(t, driver, []Call{
-		{"CopyIsoToMachineDir path default http://b2d.org", "", nil},
+		{"CopyIsoToMachineDir path default http://b2d.org false", "", nil},
 		{"Generate path/machines/default/id_rsa", "", nil},
 		{"Create 20000 path/machines/default/id_rsa.pub path/machines/default/disk.vmdk", "", nil},
 		{"vbm createvm --basefolder path/machines/default --name default --register", "", nil},
@@ -481,7 +481,7 @@ func TestCreateVMWithSpecificNatNicType(t *testing.T) {
 	driver := NewDriver("default", "path")
 	driver.NatNicType = "Am79C973"
 	mockCalls(t, driver, []Call{
-		{"CopyIsoToMachineDir path default http://b2d.org", "", nil},
+		{"CopyIsoToMachineDir path default http://b2d.org false", "", nil},
 		{"Generate path/machines/default/id_rsa", "", nil},
 		{"Create 20000 path/machines/default/id_rsa.pub path/machines/default/disk.vmdk", "", nil},
 		{"vbm createvm --basefolder path/machines/default --name default --register", "", nil},

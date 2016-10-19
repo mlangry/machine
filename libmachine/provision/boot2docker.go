@@ -54,7 +54,7 @@ func (provisioner *Boot2DockerProvisioner) upgradeIso() error {
 	// TODO: Ideally, we should not read from mcndirs directory at all.
 	// The driver should be able to communicate how and where to place the
 	// relevant files.
-	b2dutils := mcnutils.NewB2dUtils(mcndirs.GetBaseDir())
+	b2dutils := mcnutils.NewB2dUtils(mcndirs.GetBaseDir(), false)
 
 	// Check if the driver has specified a custom b2d url
 	jsonDriver, err := json.Marshal(provisioner.GetDriver())

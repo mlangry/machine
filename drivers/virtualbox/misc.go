@@ -13,8 +13,8 @@ import (
 
 // B2DUpdater describes the interactions with b2d.
 type B2DUpdater interface {
-	UpdateISOCache(storePath, isoURL string) error
-	CopyIsoToMachineDir(storePath, machineName, isoURL string) error
+	UpdateISOCache(storePath, isoURL string, experimental bool) error
+	CopyIsoToMachineDir(storePath, machineName, isoURL string, experimental bool) error
 }
 
 func NewB2DUpdater() B2DUpdater {
@@ -23,12 +23,12 @@ func NewB2DUpdater() B2DUpdater {
 
 type b2dUtilsUpdater struct{}
 
-func (u *b2dUtilsUpdater) CopyIsoToMachineDir(storePath, machineName, isoURL string) error {
-	return mcnutils.NewB2dUtils(storePath).CopyIsoToMachineDir(isoURL, machineName)
+func (u *b2dUtilsUpdater) CopyIsoToMachineDir(storePath, machineName, isoURL string, experimental bool) error {
+	return mcnutils.NewB2dUtils(storePath, experimental).CopyIsoToMachineDir(isoURL, machineName)
 }
 
-func (u *b2dUtilsUpdater) UpdateISOCache(storePath, isoURL string) error {
-	return mcnutils.NewB2dUtils(storePath).UpdateISOCache(isoURL)
+func (u *b2dUtilsUpdater) UpdateISOCache(storePath, isoURL string, experimental bool) error {
+	return mcnutils.NewB2dUtils(storePath, experimental).UpdateISOCache(isoURL)
 }
 
 // SSHKeyGenerator describes the generation of ssh keys.

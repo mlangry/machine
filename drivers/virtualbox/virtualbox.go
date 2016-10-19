@@ -47,28 +47,29 @@ type Driver struct {
 	*drivers.BaseDriver
 	VBoxManager
 	HostInterfaces
-	b2dUpdater          B2DUpdater
-	sshKeyGenerator     SSHKeyGenerator
-	diskCreator         DiskCreator
-	logsReader          LogsReader
-	ipWaiter            IPWaiter
-	randomInter         RandomInter
-	sleeper             Sleeper
-	CPU                 int
-	Memory              int
-	DiskSize            int
-	NatNicType          string
-	Boot2DockerURL      string
-	Boot2DockerImportVM string
-	HostDNSResolver     bool
-	HostOnlyCIDR        string
-	HostOnlyNicType     string
-	HostOnlyPromiscMode string
-	UIType              string
-	HostOnlyNoDHCP      bool
-	NoShare             bool
-	DNSProxy            bool
-	NoVTXCheck          bool
+	b2dUpdater              B2DUpdater
+	sshKeyGenerator         SSHKeyGenerator
+	diskCreator             DiskCreator
+	logsReader              LogsReader
+	ipWaiter                IPWaiter
+	randomInter             RandomInter
+	sleeper                 Sleeper
+	CPU                     int
+	Memory                  int
+	DiskSize                int
+	NatNicType              string
+	Boot2DockerExperimental bool
+	Boot2DockerURL          string
+	Boot2DockerImportVM     string
+	HostDNSResolver         bool
+	HostOnlyCIDR            string
+	HostOnlyNicType         string
+	HostOnlyPromiscMode     string
+	UIType                  string
+	HostOnlyNoDHCP          bool
+	NoShare                 bool
+	DNSProxy                bool
+	NoVTXCheck              bool
 }
 
 // NewDriver creates a new VirtualBox driver with default settings.
@@ -122,6 +123,11 @@ func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 			Usage:  "Size of disk for host in MB",
 			Value:  defaultDiskSize,
 			EnvVar: "VIRTUALBOX_DISK_SIZE",
+		},
+		mcnflag.BoolFlag{
+			Name:   "virtualbox-boot2docker-experimental",
+			Usage:  "Use the experimental boot2docker image",
+			EnvVar: "VIRTUALBOX_BOOT2DOCKER_EXPERIMENTAL",
 		},
 		mcnflag.StringFlag{
 			Name:   "virtualbox-boot2docker-url",
@@ -228,6 +234,7 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.CPU = flags.Int("virtualbox-cpu-count")
 	d.Memory = flags.Int("virtualbox-memory")
 	d.DiskSize = flags.Int("virtualbox-disk-size")
+	d.Boot2DockerExperimental = flags.Bool("virtualbox-boot2docker-experimental")
 	d.Boot2DockerURL = flags.String("virtualbox-boot2docker-url")
 	d.SetSwarmConfigFromFlags(flags)
 	d.SSHUser = "docker"
@@ -271,7 +278,7 @@ func (d *Driver) PreCreateCheck() error {
 
 	// Downloading boot2docker to cache should be done here to make sure
 	// that a download failure will not leave a machine half created.
-	if err := d.b2dUpdater.UpdateISOCache(d.StorePath, d.Boot2DockerURL); err != nil {
+	if err := d.b2dUpdater.UpdateISOCache(d.StorePath, d.Boot2DockerURL, d.Boot2DockerExperimental); err != nil {
 		return err
 	}
 
@@ -293,7 +300,7 @@ func (d *Driver) Create() error {
 }
 
 func (d *Driver) CreateVM() error {
-	if err := d.b2dUpdater.CopyIsoToMachineDir(d.StorePath, d.MachineName, d.Boot2DockerURL); err != nil {
+	if err := d.b2dUpdater.CopyIsoToMachineDir(d.StorePath, d.MachineName, d.Boot2DockerURL, d.Boot2DockerExperimental); err != nil {
 		return err
 	}
 
@@ -420,12 +427,19 @@ func (d *Driver) CreateVM() error {
 		return err
 	}
 
+	var isoFilename = ""
+	if d.Boot2DockerExperimental {
+		isoFilename = "boot2docker-experimental.iso"
+	} else {
+		isoFilename = "boot2docker.iso"
+	}
+
 	if err := d.vbm("storageattach", d.MachineName,
 		"--storagectl", "SATA",
 		"--port", "0",
 		"--device", "0",
 		"--type", "dvddrive",
-		"--medium", d.ResolveStorePath("boot2docker.iso")); err != nil {
+		"--medium", d.ResolveStorePath(isoFilename)); err != nil {
 		return err
 	}
 

@@ -21,7 +21,7 @@ import (
 const (
 	versionsURL  = "http://releases.rancher.com/os/versions.yml"
 	isoURL       = "https://github.com/rancherio/os/releases/download/%s/machine-rancheros.iso"
-	hostnameTmpl = `sudo mkdir -p /var/lib/rancher/conf/cloud-config.d/  
+	hostnameTmpl = `sudo mkdir -p /var/lib/rancher/conf/cloud-config.d/
 sudo tee /var/lib/rancher/conf/cloud-config.d/machine-hostname.yml << EOF
 #cloud-config
 
@@ -186,7 +186,7 @@ func (provisioner *RancherProvisioner) upgradeIso() error {
 	// TODO: Ideally, we should not read from mcndirs directory at all.
 	// The driver should be able to communicate how and where to place the
 	// relevant files.
-	b2dutils := mcnutils.NewB2dUtils(mcndirs.GetBaseDir())
+	b2dutils := mcnutils.NewB2dUtils(mcndirs.GetBaseDir(), false)
 
 	url, err := provisioner.getLatestISOURL()
 	if err != nil {
